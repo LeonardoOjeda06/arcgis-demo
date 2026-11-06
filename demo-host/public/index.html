@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portal de prueba · app cliente</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+      header { background: #1e293b; color: white; padding: 12px 20px; display: flex; gap: 16px; align-items: center; }
+      main { max-width: 1100px; margin: 20px auto; padding: 0 16px; display: grid; gap: 16px; grid-template-columns: 2fr 1fr; }
+      @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+      .card { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+      label { display: block; font-size: 12px; color: #475569; margin: 8px 0 4px; }
+      input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+      #log { font: 12px ui-monospace, monospace; background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 6px; height: 180px; overflow: auto; white-space: pre-wrap; }
+      select { padding: 4px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Portal de prueba</strong>
+      <span style="font-size: 13px; opacity: .8">App cliente de demostración que incrusta el mapa</span>
+      <label style="margin: 0 0 0 auto; color: white">
+        Usuario:
+        <select id="user"><option value="ana">Ana</option><option value="luis">Luis</option></select>
+      </label>
+    </header>
+    <main>
+      <section class="card">
+        <h2 style="margin-top: 0; font-size: 16px">Registre su residencia</h2>
+        <div id="mapa"></div>
+      </section>
+      <aside class="card">
+        <h2 style="margin-top: 0; font-size: 16px">Formulario de la app cliente</h2>
+        <p style="font-size: 13px; color: #475569">Se llena solo cuando el mapa emite <code>map:location-saved</code>.</p>
+        <label for="addr">Dirección</label><input id="addr" readonly />
+        <label for="lat">Latitud</label><input id="lat" readonly />
+        <label for="lng">Longitud</label><input id="lng" readonly />
+        <label>Eventos recibidos</label>
+        <div id="log"></div>
+      </aside>
+    </main>
+
+    <!-- En producción: https://mapas.tuorg.com/sdk/map-embed-sdk.iife.js con integrity="sha384-…" -->
+    <script src="/sdk/map-embed-sdk.iife.js"></script>
+    <script>
+      const log = (t) => {
+        const el = document.getElementById('log');
+        el.textContent += `${new Date().toLocaleTimeString()}  ${t}\n`;
+        el.scrollTop = el.scrollHeight;
+      };
+      const userSel = document.getElementById('user');
+      let embed;
+
+      async function mount() {
+        const cfg = await fetch('/config.json').then((r) => r.json());
+        embed?.destroy();
+        embed = MapEmbed.mountMapEmbed({
+          container: document.getElementById('mapa'),
+          embedUrl: cfg.embedUrl,
+          clientId: cfg.clientId,
+          height: '560px',
+          getToken: async () => {
+            log('pidiendo token a MI backend…');
+            const r = await fetch(`/api/map-token?user=${userSel.value}`, { method: 'POST' });
+            if (!r.ok) throw new Error('sin token');
+            return (await r.json()).token;
+          },
+          onEvent: (m) => {
+            log(`${m.type} ${m.payload ? JSON.stringify(m.payload) : ''}`);
+            if (m.type === 'map:location-saved') {
+              document.getElementById('addr').value = m.payload.address;
+              document.getElementById('lat').value = m.payload.latitude;
+              document.getElementById('lng').value = m.payload.longitude;
+            }
+          },
+        });
+      }
+      userSel.addEventListener('change', mount);
+      mount();
+    </script>
+  </body>
+</html>

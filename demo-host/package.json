@@ -1,0 +1,10 @@
+{
+  "name": "demo-host",
+  "private": true,
+  "version": "1.0.0",
+  "description": "App cliente de demostración: incrusta el mapa con map-embed-sdk",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=.env server.mjs"
+  }
+}

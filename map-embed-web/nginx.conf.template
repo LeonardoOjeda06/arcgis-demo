@@ -1,0 +1,49 @@
+# mapas.tuorg.com — iframe + SDK estático.
+# La imagen oficial de Nginx sustituye ${API_ORIGIN} y ${MAP_API_INTERNAL} al arrancar;
+# las variables propias de Nginx ($fa, $arg_client…) no se tocan.
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Página del iframe: frame-ancestors con los orígenes registrados de la app (?client=...).
+    location = /embed {
+        auth_request /_frame_policy;
+        auth_request_set $fa $upstream_http_x_frame_ancestors;
+        add_header Content-Security-Policy "frame-ancestors $fa; default-src 'self'; script-src 'self' https://js.arcgis.com; style-src 'self' 'unsafe-inline' https://js.arcgis.com; img-src 'self' data: blob: https://*.arcgis.com https://*.arcgisonline.com; font-src 'self' data: https://js.arcgis.com; connect-src 'self' ${API_ORIGIN} https://*.arcgis.com https://*.arcgisonline.com; worker-src 'self' blob:; child-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" always;
+        # strict-origin (no "no-referrer"): la llave de mapa base de ArcGIS se valida por Referer.
+        # Solo se envía el origen del iframe, nunca la ruta.
+        add_header Referrer-Policy "strict-origin" always;
+        add_header Cache-Control "no-store" always;
+        try_files /index.html =404;
+    }
+
+    # Consulta interna a map-api: nunca accesible desde internet.
+    location = /_frame_policy {
+        internal;
+        proxy_pass ${MAP_API_INTERNAL}/api/v1/embed/frame-policy/$arg_client;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+    }
+
+    # SDK para páginas sin bundler (con SRI desde la página del cliente).
+    location /sdk/ {
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Cache-Control "public, max-age=300" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Cualquier otra ruta no se puede incrustar.
+    location / {
+        add_header Content-Security-Policy "frame-ancestors 'none'" always;
+        try_files $uri =404;
+    }
+}
